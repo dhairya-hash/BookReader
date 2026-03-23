@@ -35,27 +35,38 @@ export default function Index() {
         
         // Create permanent storage directory
         const booksDir = `${FileSystem.documentDirectory}books/`;
-        const dirInfo = await FileSystem.getInfoAsync(booksDir);
         
-        if (!dirInfo.exists) {
+        try {
+          // Try to create directory (will succeed if it doesn't exist)
           await FileSystem.makeDirectoryAsync(booksDir, { intermediates: true });
+        } catch (error) {
+          // Directory already exists, that's fine
+          console.log('Books directory already exists');
         }
 
         // Copy file to permanent location
-        const fileName = file.name;
+        const fileName = file.name || 'book.pdf';
         const newPath = `${booksDir}${Date.now()}_${fileName}`;
-        await FileSystem.copyAsync({
-          from: file.uri,
-          to: newPath,
-        });
+        
+        try {
+          await FileSystem.copyAsync({
+            from: file.uri,
+            to: newPath,
+          });
+        } catch (copyError) {
+          console.error('Error copying file:', copyError);
+          Alert.alert('Error', 'Failed to save PDF. Please try again.');
+          setLoading(false);
+          return;
+        }
 
         // Add to book library
         await addBook({
           id: Date.now().toString(),
           title: fileName.replace('.pdf', ''),
           filePath: newPath,
-          totalPages: 0, // Will be calculated when opening
-          currentPage: 0,
+          totalPages: 5, // Sample pages
+          currentPage: 1,
           currentWord: 0,
           dateAdded: new Date().toISOString(),
         });

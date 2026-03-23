@@ -47,11 +47,16 @@ export class KokoroTTSEngine {
       const modelFile = `${modelDir}${MODEL_FILES.model_q8}`;
       const voicesFile = `${modelDir}${MODEL_FILES.voices}`;
 
-      const modelInfo = await FileSystem.getInfoAsync(modelFile);
-      const voicesInfo = await FileSystem.getInfoAsync(voicesFile);
-
-      return modelInfo.exists && voicesInfo.exists;
+      // Check if files exist by trying to get their info
+      try {
+        const modelStat = await FileSystem.getInfoAsync(modelFile);
+        const voicesStat = await FileSystem.getInfoAsync(voicesFile);
+        return modelStat.exists && voicesStat.exists;
+      } catch {
+        return false;
+      }
     } catch (error) {
+      console.error('Error checking models:', error);
       return false;
     }
   }
@@ -62,10 +67,12 @@ export class KokoroTTSEngine {
     try {
       // Create models directory
       const modelDir = `${FileSystem.documentDirectory}models/`;
-      const dirInfo = await FileSystem.getInfoAsync(modelDir);
       
-      if (!dirInfo.exists) {
+      try {
         await FileSystem.makeDirectoryAsync(modelDir, { intermediates: true });
+      } catch {
+        // Directory already exists
+        console.log('Models directory already exists');
       }
 
       // Download model file
