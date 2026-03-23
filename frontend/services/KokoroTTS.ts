@@ -1,7 +1,16 @@
 import * as FileSystem from 'expo-file-system';
-import { Alert } from 'react-native';
-import { InferenceSession, Tensor } from 'onnxruntime-react-native';
+import { Alert, Platform } from 'react-native';
 import { phonemize } from 'phonemizer';
+
+// Lazy load ONNX Runtime only on native platforms
+let InferenceSession: any = null;
+let Tensor: any = null;
+
+if (Platform.OS !== 'web') {
+  const onnx = require('onnxruntime-react-native');
+  InferenceSession = onnx.InferenceSession;
+  Tensor = onnx.Tensor;
+}
 
 // Kokoro TTS model URLs from Hugging Face
 const MODEL_BASE_URL = 'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main';

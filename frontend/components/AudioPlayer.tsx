@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Animated,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,16 +14,22 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AudioPlayerProps {
   audioUri: string | null;
+  words: string[];
   onPlaybackComplete?: () => void;
-  onPlaybackUpdate?: (positionMillis: number, durationMillis: number) => void;
+  onPlaybackUpdate?: (currentWordIndex: number) => void;
+  onSkipWord?: (direction: 'forward' | 'backward') => void;
+  onSkipSentence?: (direction: 'forward' | 'backward') => void;
 }
 
 const SETTINGS_KEY = '@pdf_reader_settings';
 
 export default function AudioPlayer({
   audioUri,
+  words,
   onPlaybackComplete,
   onPlaybackUpdate,
+  onSkipWord,
+  onSkipSentence,
 }: AudioPlayerProps) {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -30,6 +37,10 @@ export default function AudioPlayer({
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const [currentWordIndex, setCurrentWordIndex] = useState(0);
+  
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isLongPress, setIsLongPress] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -45,6 +56,16 @@ export default function AudioPlayer({
       loadAudio();
     }
   }, [audioUri]);
+
+  useEffect(() => {
+    // Calculate current word based on playback position
+    if (duration > 0 && words.length > 0) {
+      const progress = position / duration;
+      const wordIndex = Math.floor(progress * words.length);
+      setCurrentWordIndex(Math.min(wordIndex, words.length - 1));
+      onPlaybackUpdate?.(wordIndex);
+    }
+  }, [position, duration, words]);
 
   const loadSettings = async () => {
     try {
@@ -64,12 +85,10 @@ export default function AudioPlayer({
     try {
       setIsLoading(true);
 
-      // Unload previous audio
       if (sound) {
         await sound.unloadAsync();
       }
 
-      // Load new audio
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: audioUri },
         { shouldPlay: false, rate: playbackSpeed },
@@ -91,9 +110,8 @@ export default function AudioPlayer({
       setDuration(status.durationMillis);
       setIsPlaying(status.isPlaying);
 
-      onPlaybackUpdate?.(status.positionMillis, status.durationMillis);
-
       if (status.didJustFinish) {
+        setCurrentWordIndex(0);
         onPlaybackComplete?.();
       }
     }
@@ -113,25 +131,43 @@ export default function AudioPlayer({
     }
   };
 
-  const handleSkipBackward = async () => {
-    if (!sound) return;
-
-    try {
-      const newPosition = Math.max(0, position - 15000); // 15 seconds back
-      await sound.setPositionAsync(newPosition);
-    } catch (error) {
-      console.error('Error skipping backward:', error);
-    }
+  const handlePressIn = (direction: 'forward' | 'backward', buttonType: 'skip') => {
+    setIsLongPress(false);
+    longPressTimerRef.current = setTimeout(() => {
+      setIsLongPress(true);
+      // Long press - skip sentence
+      onSkipSentence?.(direction);
+      handleSkipTime(direction, 15000); // Also skip 15s in audio
+    }, 500); // 500ms for long press
   };
 
-  const handleSkipForward = async () => {
+  const handlePressOut = (direction: 'forward' | 'backward') => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+    
+    if (!isLongPress) {
+      // Short press - skip word
+      onSkipWord?.(direction);
+      const wordDuration = duration / words.length;
+      const skipAmount = direction === 'forward' ? wordDuration : -wordDuration;
+      handleSkipTime(direction, Math.abs(skipAmount));
+    }
+    
+    setIsLongPress(false);
+  };
+
+  const handleSkipTime = async (direction: 'forward' | 'backward', amount: number) => {
     if (!sound || !duration) return;
 
     try {
-      const newPosition = Math.min(duration, position + 15000); // 15 seconds forward
+      const newPosition = direction === 'forward'
+        ? Math.min(duration, position + amount)
+        : Math.max(0, position - amount);
+      
       await sound.setPositionAsync(newPosition);
     } catch (error) {
-      console.error('Error skipping forward:', error);
+      console.error('Error skipping:', error);
     }
   };
 
@@ -146,7 +182,6 @@ export default function AudioPlayer({
       await sound.setRateAsync(nextSpeed, true);
       setPlaybackSpeed(nextSpeed);
       
-      // Save to settings
       const stored = await AsyncStorage.getItem(SETTINGS_KEY);
       const settings = stored ? JSON.parse(stored) : {};
       settings.playbackSpeed = nextSpeed;
@@ -175,26 +210,28 @@ export default function AudioPlayer({
 
   return (
     <View style={styles.container}>
-      {/* Progress Bar */}
       <View style={styles.progressSection}>
         <View style={styles.progressBar}>
           <View style={[styles.progressFill, { width: `${progressPercentage}%` }]} />
         </View>
         <View style={styles.timeContainer}>
           <Text style={styles.timeText}>{formatTime(position)}</Text>
+          <Text style={styles.wordIndicator}>
+            Word {currentWordIndex + 1} of {words.length}
+          </Text>
           <Text style={styles.timeText}>{formatTime(duration)}</Text>
         </View>
       </View>
 
-      {/* Controls */}
       <View style={styles.controls}>
         <TouchableOpacity
           style={styles.controlButton}
-          onPress={handleSkipBackward}
+          onPressIn={() => handlePressIn('backward', 'skip')}
+          onPressOut={() => handlePressOut('backward')}
           disabled={!sound || isLoading}
         >
           <Ionicons name="play-skip-back" size={28} color="#fff" />
-          <Text style={styles.skipText}>15s</Text>
+          <Text style={styles.skipText}>word/sent</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -215,11 +252,12 @@ export default function AudioPlayer({
 
         <TouchableOpacity
           style={styles.controlButton}
-          onPress={handleSkipForward}
+          onPressIn={() => handlePressIn('forward', 'skip')}
+          onPressOut={() => handlePressOut('forward')}
           disabled={!sound || isLoading}
         >
           <Ionicons name="play-skip-forward" size={28} color="#fff" />
-          <Text style={styles.skipText}>15s</Text>
+          <Text style={styles.skipText}>word/sent</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -230,6 +268,10 @@ export default function AudioPlayer({
           <Text style={styles.speedText}>{playbackSpeed}x</Text>
         </TouchableOpacity>
       </View>
+
+      <Text style={styles.instructionText}>
+        Tap to skip word • Hold to skip sentence
+      </Text>
     </View>
   );
 }
@@ -264,16 +306,23 @@ const styles = StyleSheet.create({
   timeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   timeText: {
     color: '#888',
     fontSize: 12,
+  },
+  wordIndicator: {
+    color: '#4a9eff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,
+    marginBottom: 8,
   },
   controlButton: {
     width: 56,
@@ -306,7 +355,13 @@ const styles = StyleSheet.create({
   },
   skipText: {
     color: '#888',
-    fontSize: 10,
+    fontSize: 9,
     marginTop: 2,
+  },
+  instructionText: {
+    color: '#666',
+    fontSize: 11,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
