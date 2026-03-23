@@ -1,5 +1,15 @@
 import * as FileSystem from 'expo-file-system';
-import * as pdfjs from 'pdfjs-dist';
+import { Platform } from 'react-native';
+
+// Lazy load pdfjs only on native platforms to avoid web issues
+let pdfjs: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    pdfjs = require('pdfjs-dist');
+  } catch (error) {
+    console.log('pdfjs-dist not available, using fallback');
+  }
+}
 
 export interface PDFTextContent {
   text: string;
