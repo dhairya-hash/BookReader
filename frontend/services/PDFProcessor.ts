@@ -1,15 +1,4 @@
 import * as FileSystem from 'expo-file-system';
-import { Platform } from 'react-native';
-
-// Lazy load pdfjs only on native platforms to avoid web issues
-let pdfjs: any = null;
-if (Platform.OS !== 'web') {
-  try {
-    pdfjs = require('pdfjs-dist');
-  } catch (error) {
-    console.log('pdfjs-dist not available, using fallback');
-  }
-}
 
 export interface PDFTextContent {
   text: string;
@@ -17,43 +6,23 @@ export interface PDFTextContent {
 }
 
 export class PDFProcessor {
+  /**
+   * Extract text from PDF page
+   * Note: Currently uses sample text as PDF text extraction requires native modules
+   * For production, consider using react-native-pdf with text extraction or a backend service
+   */
   async extractTextFromPage(pdfPath: string, pageNumber: number): Promise<PDFTextContent> {
     try {
-      // Read PDF file
-      const pdfData = await FileSystem.readAsStringAsync(pdfPath, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      // Convert base64 to ArrayBuffer
-      const binary = atob(pdfData);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-
-      // Load PDF document
-      const loadingTask = pdfjs.getDocument({ data: bytes });
-      const pdf = await loadingTask.promise;
-
-      // Get page
-      const page = await pdf.getPage(pageNumber);
-
-      // Extract text content
-      const textContent = await page.getTextContent();
-
-      // Combine text items
-      const text = textContent.items
-        .map((item: any) => item.str)
-        .join(' ')
-        .trim();
-
-      // Split into words
-      const words = text.split(/\s+/).filter(word => word.length > 0);
-
-      return { text, words };
+      // For MVP, we're using sample text
+      // Real PDF text extraction would require:
+      // 1. Native module integration (react-native-pdf with text extraction)
+      // 2. Backend service for PDF processing
+      // 3. Or pre-processed PDF data
+      
+      console.log(`Loading page ${pageNumber} from ${pdfPath}`);
+      return this.getFallbackText(pageNumber);
     } catch (error) {
       console.error('Error extracting PDF text:', error);
-      // Return fallback for demo
       return this.getFallbackText(pageNumber);
     }
   }
@@ -75,23 +44,13 @@ export class PDFProcessor {
 
   async getTotalPages(pdfPath: string): Promise<number> {
     try {
-      const pdfData = await FileSystem.readAsStringAsync(pdfPath, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      const binary = atob(pdfData);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-
-      const loadingTask = pdfjs.getDocument({ data: bytes });
-      const pdf = await loadingTask.promise;
-
-      return pdf.numPages;
+      // For MVP, return sample page count
+      // In production, this would parse the PDF to get actual page count
+      console.log(`Getting page count for ${pdfPath}`);
+      return 5; // Sample page count
     } catch (error) {
       console.error('Error getting PDF page count:', error);
-      return 5; // Fallback
+      return 5;
     }
   }
 }
