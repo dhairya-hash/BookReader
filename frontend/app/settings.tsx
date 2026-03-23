@@ -7,9 +7,11 @@ import {
   ScrollView,
   Switch,
 } from 'react-native';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
+import { ttsEngine } from '../services/KokoroTTS';
 
 const SETTINGS_KEY = '@pdf_reader_settings';
 
@@ -29,10 +31,17 @@ const defaultSettings: Settings = {
 
 export default function Settings() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [modelsDownloaded, setModelsDownloaded] = useState(false);
 
   useEffect(() => {
     loadSettings();
+    checkModels();
   }, []);
+
+  const checkModels = async () => {
+    const downloaded = await ttsEngine.checkModelsDownloaded();
+    setModelsDownloaded(downloaded);
+  };
 
   const loadSettings = async () => {
     try {
@@ -145,15 +154,37 @@ export default function Settings() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>TTS Model Status</Text>
-        <View style={styles.infoCard}>
+        <TouchableOpacity 
+          style={styles.infoCard}
+          onPress={() => router.push('/model-setup')}
+          activeOpacity={0.7}
+        >
           <View style={styles.statusRow}>
-            <Ionicons name="alert-circle" size={24} color="#ff9800" />
-            <Text style={styles.statusText}>Model not downloaded</Text>
+            <Ionicons 
+              name={modelsDownloaded ? "checkmark-circle" : "alert-circle"} 
+              size={24} 
+              color={modelsDownloaded ? "#4caf50" : "#ff9800"} 
+            />
+            <Text style={[
+              styles.statusText,
+              modelsDownloaded && { color: '#4caf50' }
+            ]}>
+              {modelsDownloaded ? "Models installed" : "Models not downloaded"}
+            </Text>
           </View>
           <Text style={styles.infoDescription}>
-            Kokoro TTS model will be integrated in the next phase. Coming soon!
+            {modelsDownloaded 
+              ? "Kokoro TTS is ready to use. Tap to manage models."
+              : "Download Kokoro TTS models to enable speech generation. Tap to download."
+            }
           </Text>
-        </View>
+          <View style={styles.actionHint}>
+            <Text style={styles.actionHintText}>
+              {modelsDownloaded ? "Manage" : "Download now"}
+            </Text>
+            <Ionicons name="chevron-forward" size={20} color="#4a9eff" />
+          </View>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -266,5 +297,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#ff9800',
     fontWeight: '500',
+  },
+  actionHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 12,
+    gap: 4,
+  },
+  actionHintText: {
+    fontSize: 14,
+    color: '#4a9eff',
+    fontWeight: '600',
   },
 });

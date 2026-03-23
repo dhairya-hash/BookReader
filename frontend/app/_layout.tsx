@@ -36,6 +36,13 @@ export default function RootLayout() {
             headerShown: true
           }} 
         />
+        <Stack.Screen 
+          name="model-setup" 
+          options={{ 
+            title: 'TTS Model Setup',
+            headerShown: true
+          }} 
+        />
       </Stack>
     </GestureHandlerRootView>
   );
